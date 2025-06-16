@@ -54,6 +54,78 @@ def extract_keypoints(results):
 
     return np.concatenate([pose, face, left_hand, right_hand])
 
+def create_data_folders(actions, no_sequences):
+
+    for action in actions:
+
+        for sequence in range(no_sequences):
+
+            os.makedirs(os.path.join(data_path, action, str(sequence)), exist_ok=True)
+
+
+def collect_keypoints():
+
+    #accessing webcam using OpenCV
+    cap = cv.VideoCapture(0, cv.CAP_AVFOUNDATION)
+
+    #60fps camera feed
+    cap.set(cv.CAP_PROP_FPS, 60)
+
+    #set the mediapipe holistic model with specified confidence levels
+    with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
+
+        #loop through the actions
+        for action in actions:
+
+            #loop through the videos
+            for sequence in range(no_sequences):
+
+                #loop through the frames of the videos
+                for frame_num in range(sequence_length):
+            
+                    #read frame from webcam
+                    ret, frame = cap.read()
+
+                    frame = cv.resize(frame, (720, 405))
+
+                    #make detection using mediapipe
+                    image, results = mediapipe_detection(frame, holistic)
+
+                    #draw landmarks on the image
+                    draw_format_landmarks(image, results)
+
+                    if not ret:
+
+                        break
+                    
+                    #flip horizontally
+                    image = cv.flip(image, 1)
+
+                    if frame_num == 0:
+
+                        cv.putText(image, 'Collecting frames for action:', (120, 70),
+                                   cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 4, cv.LINE_AA)
+                        cv.putText(image, 'Collecting frames for {} Video Number {}'.format(action, sequence), (15, 12),
+                                   cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 4, cv.LINE_AA)
+                        
+                        cv.waitKey(2000)
+
+                    else:
+
+                        cv.putText(image, 'Collecting frames for {} Video Number {}'.format(action, sequence), (15, 12),
+                                   cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 4, cv.LINE_AA)
+
+                    #show to screen
+                    cv.imshow('Webcam Feed', image)
+
+            #press 'ESC' to exit
+            if cv.waitKey(1) & 0xFF == 27:
+
+                break
+
+    cap.release()
+    cv.destroyAllWindows()
+
 def main():
     
     #accessing webcam using OpenCV
@@ -97,11 +169,26 @@ def main():
     cv.destroyAllWindows()
 
 if __name__ == "__main__":
-    
+
     #using holistic model from mediapipe
     mp_holistic = mp.solutions.holistic
 
     #using drawing utilities from mediapipe
     mp_drawing = mp.solutions.drawing_utils
+
+    #set the path for saving the data
+    data_path= os.path.join('mp_data')
+
+    #actions to be recognized:
+    #add more to the training later
+    actions = np.array(['hello', 'thanks', 'iloveyou', 'yes', 'no'])
+
+    #number of sequences to train
+    no_sequences = 30
+
+    #length of each sequence (5 actions * 30 vids * 30 frames = 4500 frames)
+    sequence_length = 30
+
+    create_data_folders(actions, no_sequences)
 
     main()
