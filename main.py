@@ -26,13 +26,33 @@ def mediapipe_detection(image, model):
 
 def draw_format_landmarks(image, results):
 
-    mp_drawing.draw_landmarks(image, results.face_landmarks, mp.solutions.face_mesh.FACEMESH_TESSELATION,
+    mp_drawing.draw_landmarks(image, results.face_landmarks, mp.solutions.face_mesh.FACEMESH_CONTOURS,
                               mp_drawing.DrawingSpec(color=(80, 110, 10), thickness=1, circle_radius=1),
                               mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1))
     
-    mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
-    mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
-    mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
+    mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+                              mp_drawing.DrawingSpec(color=(80, 110, 10), thickness=1, circle_radius=1),
+                              mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1))
+    
+    mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+                              mp_drawing.DrawingSpec(color=(80, 110, 10), thickness=1, circle_radius=1),
+                              mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1))
+    
+    mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS,
+                              mp_drawing.DrawingSpec(color=(80, 110, 10), thickness=2, circle_radius=4),
+                              mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=2, circle_radius=2))
+
+def extract_keypoints(results):
+
+    #extract keypoints from the results
+
+    #face has 468 landmarks, left hand has 21 landmarks, right hand has 21 landmarks, and pose has 33 landmarks
+    face = np.array([[res.x, res.y, res.z] for res in results.face_landmarks.landmark]).flatten() if results.face_landmarks else np.zeros(1404)
+    left_hand = np.array([[res.x, res.y, res.z] for res in results.left_hand_landmarks.landmark]).flatten() if results.left_hand_landmarks else np.zeros(21*3)
+    right_hand = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten() if results.right_hand_landmarks else np.zeros(21*3)
+    pose = np.array([[res.x, res.y, res.z, res.visibility] for res in results.pose_landmarks.landmark]).flatten() if results.pose_landmarks else np.zeros(132)
+
+    return np.concatenate([pose, face, left_hand, right_hand])
 
 def main():
     
@@ -69,7 +89,7 @@ def main():
             cv.imshow('Webcam Feed', image)
 
             #press 'ESC' to exit
-            if cv.waitKey(10) & 0xFF == 27:
+            if cv.waitKey(1) & 0xFF == 27:
 
                 break
 
@@ -77,6 +97,7 @@ def main():
     cv.destroyAllWindows()
 
 if __name__ == "__main__":
+    
     #using holistic model from mediapipe
     mp_holistic = mp.solutions.holistic
 
