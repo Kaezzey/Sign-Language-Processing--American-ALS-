@@ -4,6 +4,9 @@ import os
 from matplotlib import pyplot as plt
 import mediapipe as mp
 import time
+from sklearn.model_selection import train_test_split
+from keras.utils import to_categorical
+
 
 def mediapipe_detection(image, model):
     
@@ -61,7 +64,6 @@ def create_data_folders(actions, no_sequences):
         for sequence in range(no_sequences):
 
             os.makedirs(os.path.join(data_path, action, str(sequence)), exist_ok=True)
-
 
 def collect_keypoints():
 
@@ -138,6 +140,52 @@ def collect_keypoints():
     cap.release()
     cv.destroyAllWindows()
 
+def create_label_map(actions):
+
+    #create a label map for the actions
+    label_map = {action: num for num, action in enumerate(actions)}
+
+    return label_map
+
+def load_data():
+
+    #load the data from the numpy files
+    sequences, labels = [], []
+
+    #loop through the actions
+    for action in actions:
+
+        #get the number of sequences for the action
+        for sequence in range(no_sequences):
+
+            #video
+            window = []
+
+            #loop through the frames of the video
+            for frame_num in range(sequence_length):
+
+                #get the path of the numpy file
+                npy_path = os.path.join(data_path, action, str(sequence), '{}.npy'.format(frame_num))
+
+                #load the numpy file
+                if os.path.exists(npy_path):
+
+                    #load the numpy file and append to the window
+                    res = np.load(npy_path)
+                    window.append(res)
+
+            #append
+            sequences.append(window)
+            labels.append(label_map[action])
+
+    #convert to numpy arrays
+    sequences, labels = np.array(sequences), to_categorical(np.array(labels)).astype(int)
+
+    #split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(sequences, labels, test_size=0.05)
+
+    return X_train, X_test, y_train, y_test
+
 def main():
     
     #accessing webcam using OpenCV
@@ -203,4 +251,12 @@ if __name__ == "__main__":
 
     create_data_folders(actions, no_sequences)
 
-    collect_keypoints()
+    label_map = create_label_map(actions)
+
+    X_train, X_test, y_train, y_test = load_data()
+    print("Training data shape:", X_train.shape)
+    print("Testing data shape:", X_test.shape)
+    print("Training labels shape:", y_train.shape)
+    print("Testing labels shape:", y_test.shape)
+
+    main()
