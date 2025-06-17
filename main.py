@@ -101,27 +101,39 @@ def collect_keypoints():
                     #flip horizontally
                     image = cv.flip(image, 1)
 
+                    #wait logic
                     if frame_num == 0:
 
                         cv.putText(image, 'Collecting frames for action:', (120, 70),
-                                   cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 4, cv.LINE_AA)
+                                   cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv.LINE_AA)
                         cv.putText(image, 'Collecting frames for {} Video Number {}'.format(action, sequence), (15, 12),
-                                   cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 4, cv.LINE_AA)
+                                   cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv.LINE_AA)
                         
+                        #show to screen
+                        cv.imshow('Webcam Feed', image)
                         cv.waitKey(2000)
 
                     else:
 
                         cv.putText(image, 'Collecting frames for {} Video Number {}'.format(action, sequence), (15, 12),
-                                   cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 4, cv.LINE_AA)
+                                   cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv.LINE_AA)
+                       
+                        #show to screen
+                        cv.imshow('Webcam Feed', image)
 
-                    #show to screen
-                    cv.imshow('Webcam Feed', image)
+                    #extract keypoints from the results
+                    keypoints= extract_keypoints(results)
 
-            #press 'ESC' to exit
-            if cv.waitKey(1) & 0xFF == 27:
+                    #get path of the numpy file
+                    npy_path = os.path.join(data_path, action, str(sequence), str(frame_num))
 
-                break
+                    #save the keypoints to a numpy file at npy_path 
+                    np.save(npy_path, keypoints)
+
+                    #press 'ESC' to exit
+                    if cv.waitKey(1) & 0xFF == 27:
+
+                        break
 
     cap.release()
     cv.destroyAllWindows()
@@ -191,4 +203,4 @@ if __name__ == "__main__":
 
     create_data_folders(actions, no_sequences)
 
-    main()
+    collect_keypoints()
