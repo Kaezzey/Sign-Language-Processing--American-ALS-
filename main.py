@@ -7,6 +7,18 @@ import time
 from sklearn.model_selection import train_test_split
 from keras.utils import to_categorical
 
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+from keras.callbacks import TensorBoard
+
+from keras.callbacks import EarlyStopping
+
+from keras.layers import Dropout
+
+from keras.models import load_model
+
+from sklearn.metrics import multilabel_confusion_matrix, accuracy_score
+
 
 def mediapipe_detection(image, model):
     
@@ -29,6 +41,7 @@ def mediapipe_detection(image, model):
 
 def draw_format_landmarks(image, results):
 
+    #draw landmarks on the image using mediapipe drawing utilities
     mp_drawing.draw_landmarks(image, results.face_landmarks, mp.solutions.face_mesh.FACEMESH_CONTOURS,
                               mp_drawing.DrawingSpec(color=(80, 110, 10), thickness=1, circle_radius=1),
                               mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1))
@@ -140,14 +153,14 @@ def collect_keypoints():
     cap.release()
     cv.destroyAllWindows()
 
-def create_label_map(actions):
+def create_label_dict(actions):
 
-    #create a label map for the actions
-    label_map = {action: num for num, action in enumerate(actions)}
+    #create a label dictionary for the actions
+    label_dict = {action: num for num, action in enumerate(actions)}
 
-    return label_map
+    return label_dict
 
-def load_data():
+def load_data(label_dict):
 
     #load the data from the numpy files
     sequences, labels = [], []
@@ -176,7 +189,7 @@ def load_data():
 
             #append
             sequences.append(window)
-            labels.append(label_map[action])
+            labels.append(label_dict[action])
 
     #convert to numpy arrays
     sequences, labels = np.array(sequences), to_categorical(np.array(labels)).astype(int)
@@ -186,7 +199,51 @@ def load_data():
 
     return X_train, X_test, y_train, y_test
 
-def main():
+def model_training(label_dict, X_train, X_test, y_train, y_test):
+
+    #logging the model training
+    log_dir = os.path.join('Logs')
+    tb_callback = TensorBoard(log_dir=log_dir)
+
+    #create the model
+    model = Sequential()
+    model.add(LSTM(64, return_sequences=True, activation='tanh', input_shape=(X_train.shape[1], X_train.shape[2])))
+    model.add(LSTM(128, return_sequences=True, activation='tanh'))
+    model.add(Dropout(0.2))
+    model.add(LSTM(64, return_sequences=False, activation='tanh'))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dropout(0.4))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(actions.shape[0], activation='softmax'))
+    
+    model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['categorical_accuracy'])
+
+    #train the model
+    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1300, batch_size=64, callbacks=[tb_callback])
+
+    model.summary()
+
+    #save the model
+    model.save('action_recognition_model.h5')
+    print("Model saved successfully!")
+
+    return model
+
+def model_analysis(model, X_test, y_test):
+
+    yhat = model.predict(X_test)
+    ytrue = np.argmax(y_test, axis=1).tolist()
+    yhat = np.argmax(yhat, axis=1).tolist()
+
+    print(multilabel_confusion_matrix(ytrue, yhat))
+
+
+def main(model):
+
+    #sequence and sentence are used to store the keypoints and the actions respectively
+    sequence = []
+    sentence = []
+    threshold = 0.4
     
     #accessing webcam using OpenCV
     cap = cv.VideoCapture(0, cv.CAP_AVFOUNDATION)
@@ -210,12 +267,56 @@ def main():
             #draw landmarks on the image
             draw_format_landmarks(image, results)
 
+            # flip horizontally
+            image = cv.flip(image, 1)
+
+            #prediction logic
+            keypoints = extract_keypoints(results)
+            sequence.append(keypoints)
+
+            #keep the last 30 frames
+            sequence = sequence[-30:]  
+
+            if len(sequence) == 30:
+
+                #make prediction using the model
+                res = model.predict(np.expand_dims(sequence, axis=0))[0]
+                print(actions[np.argmax(res)])
+
+                #if the prediction is above the threshold, add it to the sentence
+                if res[np.argmax(res)] > threshold:
+                    if len(sentence) > 0 and actions[np.argmax(res)] != sentence[-1]:
+                        sentence.append(actions[np.argmax(res)])
+                    elif len(sentence) == 0:
+                        sentence.append(actions[np.argmax(res)])
+
+            # visualisation
+
+                if res[np.argmax(res)] > threshold:
+
+                    # display probabilities for each action on the left side
+                    for idx, action in enumerate(actions):
+                        prob = res[idx]
+                        text = f"{action}: {prob:.2f}"
+                        y = 100 + idx * 30
+                        cv.putText(image, text, (10, y), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0) if idx == np.argmax(res) else (255, 255, 255), 2, cv.LINE_AA)
+
+                    if len(sentence) > 0:
+                        if actions[np.argmax(res)] != sentence[-1]:
+                            sentence.append(actions[np.argmax(res)])
+                    else:
+                        sentence.append(actions[np.argmax(res)])
+
+                if len(sentence) > 5:
+                    sentence = sentence[-5:]
+
+            # display the sentence on the image
+            cv.rectangle(image, (0, 0), (720, 40), (0, 0, 0), -1)
+            cv.putText(image, ' '.join(sentence), (3, 30), cv.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 2, cv.LINE_AA)
+
             if not ret:
 
                 break
-            
-            #flip horizontally
-            image = cv.flip(image, 1)
 
             #show to screen
             cv.imshow('Webcam Feed', image)
@@ -230,12 +331,14 @@ def main():
 
 if __name__ == "__main__":
 
+    #keep these two for running the model after training
     #using holistic model from mediapipe
     mp_holistic = mp.solutions.holistic
 
     #using drawing utilities from mediapipe
     mp_drawing = mp.solutions.drawing_utils
 
+    #comment this out if you want to run the model after training
     #set the path for saving the data
     data_path= os.path.join('mp_data')
 
@@ -251,12 +354,18 @@ if __name__ == "__main__":
 
     create_data_folders(actions, no_sequences)
 
-    label_map = create_label_map(actions)
+    label_dict = create_label_dict(actions)
 
-    X_train, X_test, y_train, y_test = load_data()
-    print("Training data shape:", X_train.shape)
-    print("Testing data shape:", X_test.shape)
-    print("Training labels shape:", y_train.shape)
-    print("Testing labels shape:", y_test.shape)
+    X_train, X_test, y_train, y_test = load_data(label_dict)
 
-    main()
+    #uncomment if you want to re-train the model
+    #model = model_training(label_dict, X_train, X_test, y_train, y_test)
+
+    model = load_model('action_recognition_model.h5')
+
+    model.load_weights('action_recognition_model.h5')
+    print("Model loaded successfully!")
+
+    # model_analysis(model, X_test, y_test)
+
+    main(model)
