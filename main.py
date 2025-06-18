@@ -17,7 +17,7 @@ from keras.layers import Dropout
 
 from keras.models import load_model
 
-from sklearn.metrics import multilabel_confusion_matrix, accuracy_score
+from sklearn.metrics import classification_report
 
 
 def mediapipe_detection(image, model):
@@ -195,7 +195,7 @@ def load_data(label_dict):
     sequences, labels = np.array(sequences), to_categorical(np.array(labels)).astype(int)
 
     #split the data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(sequences, labels, test_size=0.05)
+    X_train, X_test, y_train, y_test = train_test_split(sequences, labels, test_size=0.2)
 
     return X_train, X_test, y_train, y_test
 
@@ -209,17 +209,15 @@ def model_training(label_dict, X_train, X_test, y_train, y_test):
     model = Sequential()
     model.add(LSTM(64, return_sequences=True, activation='tanh', input_shape=(X_train.shape[1], X_train.shape[2])))
     model.add(LSTM(128, return_sequences=True, activation='tanh'))
-    model.add(Dropout(0.2))
     model.add(LSTM(64, return_sequences=False, activation='tanh'))
     model.add(Dense(64, activation='relu'))
-    model.add(Dropout(0.4))
     model.add(Dense(32, activation='relu'))
     model.add(Dense(actions.shape[0], activation='softmax'))
     
     model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['categorical_accuracy'])
 
     #train the model
-    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1300, batch_size=64, callbacks=[tb_callback])
+    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1000, batch_size=256, callbacks=[tb_callback])
 
     model.summary()
 
@@ -231,11 +229,11 @@ def model_training(label_dict, X_train, X_test, y_train, y_test):
 
 def model_analysis(model, X_test, y_test):
 
-    yhat = model.predict(X_test)
-    ytrue = np.argmax(y_test, axis=1).tolist()
-    yhat = np.argmax(yhat, axis=1).tolist()
+    y_pred = model.predict(X_test)
+    y_pred_labels = np.argmax(y_pred, axis=1)
+    y_true_labels = np.argmax(y_test, axis=1)
 
-    print(multilabel_confusion_matrix(ytrue, yhat))
+    print(classification_report(y_true_labels, y_pred_labels, target_names=actions))
 
 
 def main(model):
@@ -366,6 +364,6 @@ if __name__ == "__main__":
     model.load_weights('action_recognition_model.h5')
     print("Model loaded successfully!")
 
-    # model_analysis(model, X_test, y_test)
+    model_analysis(model, X_test, y_test)
 
-    main(model)
+    #main(model)
